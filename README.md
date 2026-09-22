@@ -14,12 +14,15 @@
 
 <!-- scitex-badges:start -->
 <p align="center">
-  <a href="https://pypi.org/project/scitex-tex/"><img src="https://img.shields.io/pypi/v/scitex-tex.svg" alt="PyPI"></a>
-  <a href="https://pypi.org/project/scitex-tex/"><img src="https://img.shields.io/pypi/pyversions/scitex-tex.svg" alt="Python"></a>
-  <a href="https://github.com/ywatanabe1989/scitex-tex/actions/workflows/test.yml"><img src="https://github.com/ywatanabe1989/scitex-tex/actions/workflows/test.yml/badge.svg" alt="Tests"></a>
-  <a href="https://codecov.io/gh/ywatanabe1989/scitex-tex"><img src="https://codecov.io/gh/ywatanabe1989/scitex-tex/graph/badge.svg" alt="Coverage"></a>
-  <a href="https://scitex-tex.readthedocs.io/en/latest/"><img src="https://readthedocs.org/projects/scitex-tex/badge/?version=latest" alt="Docs"></a>
-  <a href="https://www.gnu.org/licenses/agpl-3.0"><img src="https://img.shields.io/badge/license-AGPL_v3-blue.svg" alt="License: AGPL v3"></a>
+  <a href="https://pypi.org/project/scitex-tex/"><img src="https://img.shields.io/pypi/v/scitex-tex?label=pypi" alt="pypi"></a>
+  <a href="https://pypi.org/project/scitex-tex/"><img src="https://img.shields.io/pypi/pyversions/scitex-tex?label=python" alt="python"></a>
+  <a href="https://github.com/scitex-ai/scitex-tex/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/scitex-ai/scitex-tex/ci.yml?branch=develop&label=docs" alt="docs"></a>
+  <a href="https://scitex-tex.readthedocs.io/en/latest/"><img src="https://img.shields.io/readthedocs/scitex-tex?label=docs" alt="docs-rtd"></a>
+</p>
+<p align="center">
+  <a href="https://github.com/scitex-ai/scitex-tex/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/scitex-ai/scitex-tex/ci.yml?branch=develop&label=tests" alt="tests"></a>
+  <a href="https://github.com/scitex-ai/scitex-tex/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/scitex-ai/scitex-tex/ci.yml?branch=develop&label=install-check" alt="install-check"></a>
+  <a href="https://codecov.io/gh/scitex-ai/scitex-tex"><img src="https://img.shields.io/codecov/c/github/scitex-ai/scitex-tex/develop?label=cov" alt="cov"></a>
 </p>
 <!-- scitex-badges:end -->
 
@@ -29,10 +32,76 @@
 
 | # | Problem | Solution |
 |---|---------|----------|
-| 1 | **Hand-authored `.tex` from Python is brittle** — escaping `_` / `&` / `%` and locating the right `pdflatex` invocation eats hours per paper | **`export_tex` + `compile_tex`** — writer doc → `.tex` → `.pdf` in two calls; `CompileResult` exposes the pdf path + log on failure |
-| 2 | **Previewing a math snippet means firing up a full LaTeX project** | **`preview([r"$\sum x_i$"])`** — single-call rendering via matplotlib returning a `Figure`; no system TeX install required |
-| 3 | **Converting strings to LaTeX vector notation** | **`to_vec("AB")`** — wraps a label in `\overrightarrow{\mathrm{...}}` with automatic fallback |
+| 1 | **Brittle authoring** — hand-written `.tex` needs manual escaping of `_` / `&` / `%` plus the right `pdflatex` flags | **Two calls** — `export_tex` writes `.tex`, `compile_tex` builds `.pdf`; `CompileResult` holds the pdf path + log |
+| 2 | **Slow previews** — checking one math snippet means opening a full LaTeX project | **One call** — `preview` renders snippets to a matplotlib `Figure`, no system TeX needed |
+| 3 | **Manual vectors** — wrapping labels in vector notation by hand is error-prone | **One call** — `to_vec("AB")` returns vector form with automatic fallback |
 
+## Quick Start
+
+```python
+import scitex_tex as tx
+
+# Convert a SciTeX-style writer doc → .tex
+tx.export_tex(doc, "manuscript.tex")
+
+# Compile .tex → .pdf (returns CompileResult)
+result = tx.compile_tex("manuscript.tex")
+
+# Render LaTeX snippets to a matplotlib Figure
+fig = tx.preview([r"$\sum_{i=1}^N x_i$", r"$\alpha + \beta$"])
+
+# Convert a string to LaTeX vector notation
+tx.to_vec("AB")  # → \overrightarrow{\mathrm{AB}}
+```
+
+## Demo
+
+```python
+import scitex_tex as tx
+
+# 1) Render a math preview to a matplotlib Figure (no system TeX required)
+fig = tx.preview([r"$\hat{\beta} = (X^\top X)^{-1} X^\top y$"])
+fig.savefig("preview.png")
+
+# 2) Export + compile a manuscript end-to-end
+tx.export_tex(doc, "manuscript.tex")
+result = tx.compile_tex("manuscript.tex")
+print(result.pdf_path)   # → manuscript.pdf
+```
+
+```mermaid
+flowchart LR
+    A[Python writer doc] -->|export_tex| B[manuscript.tex]
+    B -->|compile_tex| C[manuscript.pdf]
+    D["r'\$\\hat\\beta\$'"] -->|preview| E[matplotlib Figure]
+    style C fill:#27ae60,stroke:#2c3e50,color:#fff
+    style E fill:#27ae60,stroke:#2c3e50,color:#fff
+```
+
+<p align="center"><sub><b>Figure 2.</b> Demo flow. <code>preview</code> is matplotlib-only; <code>compile_tex</code> shells out to <code>pdflatex</code>/<code>xelatex</code>.</sub></p>
+
+## Installation
+
+```bash
+uv pip install "scitex-tex[all]"
+```
+
+<details>
+<summary><b>Per-module extras</b></summary>
+
+<br>
+
+| Extra | Pulls in |
+|---|---|
+| `all` | `dev` + `docs` (recommended) |
+| `dev` | pytest, pytest-cov, ruff |
+| `docs` | Sphinx + RTD theme + myst-parser (docs build only) |
+
+```bash
+uv pip install -e ".[dev]"               # editable install for contributors
+```
+
+</details>
 ## Architecture
 
 ```
@@ -55,30 +124,6 @@ flowchart LR
 ```
 
 <p align="center"><sub><b>Figure 1.</b> Module layout. Three modules — export+compile, preview, vector notation — each callable independently.</sub></p>
-
-## Installation
-
-```bash
-pip install scitex-tex
-```
-
-## Quick Start
-
-```python
-import scitex_tex as tx
-
-# Convert a SciTeX-style writer doc → .tex
-tx.export_tex(doc, "manuscript.tex")
-
-# Compile .tex → .pdf (returns CompileResult)
-result = tx.compile_tex("manuscript.tex")
-
-# Render LaTeX snippets to a matplotlib Figure
-fig = tx.preview([r"$\sum_{i=1}^N x_i$", r"$\alpha + \beta$"])
-
-# Convert a string to LaTeX vector notation
-tx.to_vec("AB")  # → \overrightarrow{\mathrm{AB}}
-```
 
 ## 1 Interfaces
 
@@ -107,36 +152,10 @@ tx.to_vec("AB")  # → \overrightarrow{\mathrm{AB}}
 
 </details>
 
-## Demo
-
-```python
-import scitex_tex as tx
-
-# 1) Render a math preview to a matplotlib Figure (no system TeX required)
-fig = tx.preview([r"$\hat{\beta} = (X^\top X)^{-1} X^\top y$"])
-fig.savefig("preview.png")
-
-# 2) Export + compile a manuscript end-to-end
-tx.export_tex(doc, "manuscript.tex")
-result = tx.compile_tex("manuscript.tex")
-print(result.pdf_path)   # → manuscript.pdf
-```
-
-```mermaid
-flowchart LR
-    A[Python writer doc] -->|export_tex| B[manuscript.tex]
-    B -->|compile_tex| C[manuscript.pdf]
-    D["r'\$\\hat\\beta\$'"] -->|preview| E[matplotlib Figure]
-    style C fill:#27ae60,stroke:#2c3e50,color:#fff
-    style E fill:#27ae60,stroke:#2c3e50,color:#fff
-```
-
-<p align="center"><sub><b>Figure 2.</b> Demo flow. <code>preview</code> is matplotlib-only; <code>compile_tex</code> shells out to <code>pdflatex</code>/<code>xelatex</code>.</sub></p>
-
 ## Status
 
-Standalone module from the SciTeX ecosystem. Dependencies: numpy, matplotlib, and
-scitex-dev (for optional imports). The umbrella package's `scitex.tex` import path
+Standalone module from the SciTeX ecosystem. Dependencies: numpy, matplotlib,
+scitex-plt, and scitex-dev (for optional imports). The umbrella package's `scitex.tex` import path
 is preserved via a `sys.modules`-alias bridge.
 
 ## Part of SciTeX
