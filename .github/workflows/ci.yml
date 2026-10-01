@@ -41,6 +41,8 @@ jobs:
             printf 'UV_PYTHON_INSTALL_DIR=%s\n' "$CI_JOB_ROOT/uv-python"
             printf 'XDG_CACHE_HOME=%s\n' "$CI_JOB_ROOT/cache"
             printf 'XDG_CONFIG_HOME=%s\n' "$CI_JOB_ROOT/config"
+            # Codecov uses git --global; keep its writes off shared HOME.
+            printf 'GIT_CONFIG_GLOBAL=%s\n' "$CI_JOB_ROOT/config/gitconfig"
             printf 'MPLCONFIGDIR=%s\n' "$CI_JOB_ROOT/mpl"
             printf 'SCITEX_DIR=%s\n' "$CI_JOB_ROOT/scitex-state"
             printf 'MPLBACKEND=Agg\nRUN_E2E=1\n'
@@ -88,6 +90,8 @@ jobs:
             printf 'UV_PYTHON_INSTALL_DIR=%s\n' "$CI_JOB_ROOT/uv-python"
             printf 'XDG_CACHE_HOME=%s\n' "$CI_JOB_ROOT/cache"
             printf 'XDG_CONFIG_HOME=%s\n' "$CI_JOB_ROOT/config"
+            # Codecov uses git --global; keep its writes off shared HOME.
+            printf 'GIT_CONFIG_GLOBAL=%s\n' "$CI_JOB_ROOT/config/gitconfig"
             printf 'MPLCONFIGDIR=%s\n' "$CI_JOB_ROOT/mpl"
             printf 'SCITEX_DIR=%s\n' "$CI_JOB_ROOT/scitex-state"
             printf 'MPLBACKEND=Agg\nRUN_E2E=1\n'
@@ -124,6 +128,8 @@ jobs:
             printf 'UV_PYTHON_INSTALL_DIR=%s\n' "$CI_JOB_ROOT/uv-python"
             printf 'XDG_CACHE_HOME=%s\n' "$CI_JOB_ROOT/cache"
             printf 'XDG_CONFIG_HOME=%s\n' "$CI_JOB_ROOT/config"
+            # Codecov uses git --global; keep its writes off shared HOME.
+            printf 'GIT_CONFIG_GLOBAL=%s\n' "$CI_JOB_ROOT/config/gitconfig"
             printf 'MPLCONFIGDIR=%s\n' "$CI_JOB_ROOT/mpl"
             printf 'SCITEX_DIR=%s\n' "$CI_JOB_ROOT/scitex-state"
             printf 'MPLBACKEND=Agg\nRUN_E2E=1\n'
@@ -164,6 +170,8 @@ jobs:
             printf 'UV_PYTHON_INSTALL_DIR=%s\n' "$CI_JOB_ROOT/uv-python"
             printf 'XDG_CACHE_HOME=%s\n' "$CI_JOB_ROOT/cache"
             printf 'XDG_CONFIG_HOME=%s\n' "$CI_JOB_ROOT/config"
+            # Codecov uses git --global; keep its writes off shared HOME.
+            printf 'GIT_CONFIG_GLOBAL=%s\n' "$CI_JOB_ROOT/config/gitconfig"
             printf 'MPLCONFIGDIR=%s\n' "$CI_JOB_ROOT/mpl"
             printf 'SCITEX_DIR=%s\n' "$CI_JOB_ROOT/scitex-state"
             printf 'MPLBACKEND=Agg\nRUN_E2E=1\n'
