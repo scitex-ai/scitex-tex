@@ -31,7 +31,7 @@ CROSS_PACKAGE_IMPORTS = [
 def test_cross_package_import_resolves_to_a_real_module_object(module_name):
     """Importing scitex-tex's declared cross-package dependency must succeed."""
     # Arrange
-    pytest.importorskip(module_name)
+    pytest.importorskip(module_name.split(".")[0])
     # Act
     mod = importlib.import_module(module_name)
     # Assert

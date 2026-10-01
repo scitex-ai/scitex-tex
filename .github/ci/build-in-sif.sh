@@ -30,9 +30,9 @@ export LC_ALL=C.UTF-8 LANG=C.UTF-8
 
 # Writable scratch (the runner's TMPDIR=~/.cache/tmp is a host path that does
 # NOT resolve inside the container). Node-local /tmp is writable + ephemeral.
-TMPDIR="/tmp/build-scitex_tex-$V"
+TMPDIR="/tmp/build-scitex_tex-${GITHUB_RUN_ID:-0}-${GITHUB_RUN_ATTEMPT:-0}-$V"
 export TMPDIR
-rm -rf "$TMPDIR"
+rm -rf "${TMPDIR:?}"
 mkdir -p "$TMPDIR/site" "$TMPDIR/uv-cache"
 
 # The compute-node $HOME is RO inside the container — point every cache the

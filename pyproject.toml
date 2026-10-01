@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "scitex-tex"
-version = "0.1.7"
+version = "0.1.8"
 description = "LaTeX helpers — export to .tex, render preview images, vector formatting — standalone module from the SciTeX ecosystem"
 readme = "README.md"
 license = "AGPL-3.0-only"
@@ -20,6 +20,7 @@ classifiers = [
 dependencies = [
     "numpy",
     "matplotlib",
+    "scitex-plt",
     "scitex-dev>=0.11.7",
 ]
 
@@ -54,9 +55,16 @@ scitex_tex = ["_skills/**/*.md"]
 [project.entry-points."scitex_dev.skills"]
 scitex-tex = "scitex_tex"
 
+[tool.scitex_dev]
+no_cli = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = ["--disable-warnings"]
+markers = [
+    "smoke: fast subprocess-driven CLI happy-path tests",
+    "e2e: slow end-to-end workflows against real subsystems (RUN_E2E=1)",
+]
 
 [tool.coverage.run]
 parallel = true
