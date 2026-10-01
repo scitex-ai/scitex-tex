@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "scitex-tex"
-version = "0.1.7"
+version = "0.1.8"
 description = "LaTeX helpers — export to .tex, render preview images, vector formatting — standalone module from the SciTeX ecosystem"
 readme = "README.md"
 license = "AGPL-3.0-only"
@@ -57,7 +57,6 @@ scitex-tex = "scitex_tex"
 
 [tool.scitex_dev]
 no_cli = true
-no_e2e = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

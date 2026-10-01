@@ -5,6 +5,11 @@ All notable changes to `scitex-tex` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.1.8] - 2026-10-02
+
+- Return the documented Matplotlib Figure from the current recording wrapper; retain the actual plotting dependency and real preview/layout/text assertions.
+- Preserve trusted-main license and CLA policy, and run strict complete release tests in the digest-verified, job-owned CI SIF before normal OIDC publishing.
+
 ## [Unreleased]
 
 ### Added

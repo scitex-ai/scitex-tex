@@ -116,7 +116,9 @@ def preview(tex_str_list, enable_fallback=True):
         ax.hide_spines()
 
     fig.tight_layout()
-    return fig
+    # Current scitex-plt returns a recording wrapper. Keep the documented
+    # Matplotlib Figure return type and its flat list of Matplotlib Axes.
+    return getattr(fig, "fig", fig)
 
 
 # EOF

@@ -1,16 +1,6 @@
 name: ci
 
-# ============================================================================
-# CANONICAL CI — IDENTICAL across every scitex ecosystem repo.
-# Synced by `scitex-dev ecosystem sync-workflows`; do not edit per-repo (drift
-# is reverted). Package-agnostic — the package name is derived from the
-# checkout, so there is nothing to substitute here.
-#
-# Runner: the self-hosted Spartan CPU runner (label spartan-cpu).
-# Deps: installed per run with `uv` (cached) — `.[all,dev]` so every repo's
-# optional deps are present; no baked-SIF completeness to maintain.
-# ============================================================================
-
+# Preserve native required matrix names while using the configured org pool.
 on:
   pull_request:
     branches: [main, develop]
@@ -28,7 +18,9 @@ jobs:
   pytest-matrix:
     # Job name is a REQUIRED status check — keep verbatim fleet-wide.
     name: pytest-matrix-on-ubuntu-py${{ matrix.python-version }}
-    runs-on: [self-hosted, Linux, X64, spartan-cpu]
+    runs-on: >-
+      ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)
+          && fromJSON('["ubuntu-latest"]') || fromJSON(vars.CI_RUNS_ON || '["ubuntu-latest"]') }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -36,22 +28,36 @@ jobs:
         python-version: ["3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v3
+      - name: Initialize package-owned job state
+        run: |
+          set -euo pipefail
+          : "${RUNNER_TEMP:?runner must supply writable job scratch}"
+          CI_JOB_ROOT="$(mktemp -d "$RUNNER_TEMP/scitex-tex-ci.XXXXXXXX")"
+          mkdir -p "$CI_JOB_ROOT/tmp" "$CI_JOB_ROOT/uv-cache" "$CI_JOB_ROOT/cache" \
+            "$CI_JOB_ROOT/config" "$CI_JOB_ROOT/mpl" "$CI_JOB_ROOT/scitex-state"
+          {
+            printf 'TMPDIR=%s\n' "$CI_JOB_ROOT/tmp"
+            printf 'UV_CACHE_DIR=%s\n' "$CI_JOB_ROOT/uv-cache"
+            printf 'UV_PYTHON_INSTALL_DIR=%s\n' "$CI_JOB_ROOT/uv-python"
+            printf 'XDG_CACHE_HOME=%s\n' "$CI_JOB_ROOT/cache"
+            printf 'XDG_CONFIG_HOME=%s\n' "$CI_JOB_ROOT/config"
+            printf 'MPLCONFIGDIR=%s\n' "$CI_JOB_ROOT/mpl"
+            printf 'SCITEX_DIR=%s\n' "$CI_JOB_ROOT/scitex-state"
+            printf 'MPLBACKEND=Agg\nRUN_E2E=1\n'
+          } >> "$GITHUB_ENV"
+      - uses: astral-sh/setup-uv@v7
         with:
           cache-dependency-glob: pyproject.toml
       - name: Install (.[all,dev]) + pytest
         run: |
           set -euo pipefail
           uv venv --python ${{ matrix.python-version }} .venv
-          uv pip install --python .venv/bin/python -e ".[all,dev]" \
-            || uv pip install --python .venv/bin/python -e ".[dev]" \
-            || uv pip install --python .venv/bin/python -e .
-          # kaleido/plotly image export needs Chrome; install best-effort (no-op for non-plotly repos)
-          yes | .venv/bin/plotly_get_chrome >/dev/null 2>&1 || true
+          uv pip install --python .venv/bin/python -e ".[all,dev]"
           PKG=$(basename "$(find src -maxdepth 1 -mindepth 1 -type d ! -name '*.egg-info' | sort | head -1)")
           # .venv/bin on PATH so tests that spawn the package's console script via
           # subprocess (bare name, e.g. `scitex-dev …`) resolve it — else FileNotFoundError.
           export PATH="$PWD/.venv/bin:$PATH"
+          source .github/ci/ensure-tex.sh
           .venv/bin/python -m pytest tests/ --cov="src/$PKG" --cov-report=xml --cov-report=term
       - name: Upload coverage to Codecov
         if: always() && matrix.python-version == '3.12'
@@ -63,11 +69,30 @@ jobs:
 
   import-smoke:
     name: import-smoke-on-ubuntu-py3-12
-    runs-on: [self-hosted, Linux, X64, spartan-cpu]
+    runs-on: >-
+      ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)
+          && fromJSON('["ubuntu-latest"]') || fromJSON(vars.CI_RUNS_ON || '["ubuntu-latest"]') }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v3
+      - name: Initialize package-owned job state
+        run: |
+          set -euo pipefail
+          : "${RUNNER_TEMP:?runner must supply writable job scratch}"
+          CI_JOB_ROOT="$(mktemp -d "$RUNNER_TEMP/scitex-tex-ci.XXXXXXXX")"
+          mkdir -p "$CI_JOB_ROOT/tmp" "$CI_JOB_ROOT/uv-cache" "$CI_JOB_ROOT/cache" \
+            "$CI_JOB_ROOT/config" "$CI_JOB_ROOT/mpl" "$CI_JOB_ROOT/scitex-state"
+          {
+            printf 'TMPDIR=%s\n' "$CI_JOB_ROOT/tmp"
+            printf 'UV_CACHE_DIR=%s\n' "$CI_JOB_ROOT/uv-cache"
+            printf 'UV_PYTHON_INSTALL_DIR=%s\n' "$CI_JOB_ROOT/uv-python"
+            printf 'XDG_CACHE_HOME=%s\n' "$CI_JOB_ROOT/cache"
+            printf 'XDG_CONFIG_HOME=%s\n' "$CI_JOB_ROOT/config"
+            printf 'MPLCONFIGDIR=%s\n' "$CI_JOB_ROOT/mpl"
+            printf 'SCITEX_DIR=%s\n' "$CI_JOB_ROOT/scitex-state"
+            printf 'MPLBACKEND=Agg\nRUN_E2E=1\n'
+          } >> "$GITHUB_ENV"
+      - uses: astral-sh/setup-uv@v7
         with:
           cache-dependency-glob: pyproject.toml
       - name: Install (no extras) + import
@@ -80,20 +105,37 @@ jobs:
 
   audit:
     name: audit
-    runs-on: [self-hosted, Linux, X64, spartan-cpu]
+    runs-on: >-
+      ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)
+          && fromJSON('["ubuntu-latest"]') || fromJSON(vars.CI_RUNS_ON || '["ubuntu-latest"]') }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v3
+      - name: Initialize package-owned job state
+        run: |
+          set -euo pipefail
+          : "${RUNNER_TEMP:?runner must supply writable job scratch}"
+          CI_JOB_ROOT="$(mktemp -d "$RUNNER_TEMP/scitex-tex-ci.XXXXXXXX")"
+          mkdir -p "$CI_JOB_ROOT/tmp" "$CI_JOB_ROOT/uv-cache" "$CI_JOB_ROOT/cache" \
+            "$CI_JOB_ROOT/config" "$CI_JOB_ROOT/mpl" "$CI_JOB_ROOT/scitex-state"
+          {
+            printf 'TMPDIR=%s\n' "$CI_JOB_ROOT/tmp"
+            printf 'UV_CACHE_DIR=%s\n' "$CI_JOB_ROOT/uv-cache"
+            printf 'UV_PYTHON_INSTALL_DIR=%s\n' "$CI_JOB_ROOT/uv-python"
+            printf 'XDG_CACHE_HOME=%s\n' "$CI_JOB_ROOT/cache"
+            printf 'XDG_CONFIG_HOME=%s\n' "$CI_JOB_ROOT/config"
+            printf 'MPLCONFIGDIR=%s\n' "$CI_JOB_ROOT/mpl"
+            printf 'SCITEX_DIR=%s\n' "$CI_JOB_ROOT/scitex-state"
+            printf 'MPLBACKEND=Agg\nRUN_E2E=1\n'
+          } >> "$GITHUB_ENV"
+      - uses: astral-sh/setup-uv@v7
         with:
           cache-dependency-glob: pyproject.toml
       - name: Install + audit the workspace
         run: |
           set -euo pipefail
           uv venv --python 3.12 .venv
-          uv pip install --python .venv/bin/python -e ".[all,dev]" \
-            || uv pip install --python .venv/bin/python -e ".[dev]" \
-            || uv pip install --python .venv/bin/python -e .
+          uv pip install --python .venv/bin/python -e ".[all,dev]"
           uv pip install --python .venv/bin/python scitex-dev
           # .venv/bin on PATH so audit-all's spawned `scitex-dev` subcommands resolve.
           export PATH="$PWD/.venv/bin:$PATH"
@@ -103,28 +145,45 @@ jobs:
 
   docs-sphinx:
     name: docs-sphinx
-    runs-on: [self-hosted, Linux, X64, spartan-cpu]
+    runs-on: >-
+      ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)
+          && fromJSON('["ubuntu-latest"]') || fromJSON(vars.CI_RUNS_ON || '["ubuntu-latest"]') }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v3
+      - name: Initialize package-owned job state
+        run: |
+          set -euo pipefail
+          : "${RUNNER_TEMP:?runner must supply writable job scratch}"
+          CI_JOB_ROOT="$(mktemp -d "$RUNNER_TEMP/scitex-tex-ci.XXXXXXXX")"
+          mkdir -p "$CI_JOB_ROOT/tmp" "$CI_JOB_ROOT/uv-cache" "$CI_JOB_ROOT/cache" \
+            "$CI_JOB_ROOT/config" "$CI_JOB_ROOT/mpl" "$CI_JOB_ROOT/scitex-state"
+          {
+            printf 'TMPDIR=%s\n' "$CI_JOB_ROOT/tmp"
+            printf 'UV_CACHE_DIR=%s\n' "$CI_JOB_ROOT/uv-cache"
+            printf 'UV_PYTHON_INSTALL_DIR=%s\n' "$CI_JOB_ROOT/uv-python"
+            printf 'XDG_CACHE_HOME=%s\n' "$CI_JOB_ROOT/cache"
+            printf 'XDG_CONFIG_HOME=%s\n' "$CI_JOB_ROOT/config"
+            printf 'MPLCONFIGDIR=%s\n' "$CI_JOB_ROOT/mpl"
+            printf 'SCITEX_DIR=%s\n' "$CI_JOB_ROOT/scitex-state"
+            printf 'MPLBACKEND=Agg\nRUN_E2E=1\n'
+          } >> "$GITHUB_ENV"
+      - uses: astral-sh/setup-uv@v7
         with:
           cache-dependency-glob: pyproject.toml
       - name: Build sphinx HTML (satisfies PS-122; RTD bundle stays fresh)
         run: |
           set -euo pipefail
           CONF=""
-          for c in docs/conf.py docs/source/conf.py docs/src/conf.py; do
+          for c in docs/sphinx/conf.py docs/conf.py docs/source/conf.py docs/src/conf.py; do
             [ -f "$c" ] && CONF="$c" && break
           done
           if [ -z "$CONF" ]; then
-            echo "no sphinx conf.py (checked docs[/source|/src]) — skipping; PS-122 satisfied by workflow content"
-            exit 0
+            echo "::error::no Sphinx conf.py found; documentation was not built"
+            exit 1
           fi
           uv venv --python 3.12 .venv
-          uv pip install --python .venv/bin/python -e ".[docs]" \
-            || uv pip install --python .venv/bin/python -e ".[all,dev]" \
-            || { uv pip install --python .venv/bin/python -e .; uv pip install --python .venv/bin/python sphinx; }
+          uv pip install --python .venv/bin/python -e ".[docs]"
           CONFDIR=$(dirname "$CONF")
           # use the `sphinx-build` console script (not `python -m sphinx`) so the
           # auditor's PS-122 detects this workflow runs sphinx-build.
