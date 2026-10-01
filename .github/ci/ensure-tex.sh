@@ -13,5 +13,6 @@ printf '%s  %s\n' "$TEX_SHA256" "$TEX_ARCHIVE" | sha256sum --check --status
 tar -xJf "$TEX_ARCHIVE" -C "$TEX_JOB_ROOT"
 export PATH="$TEX_JOB_ROOT/.TinyTeX/bin/x86_64-linux:$PATH"
 command -v pdflatex >/dev/null
+command -v latexmk >/dev/null
 pdflatex --version | head -n 2
 echo "tex-compiler: TinyTeX-1 v2026.10 sha256=$TEX_SHA256 (verified; job-owned)"

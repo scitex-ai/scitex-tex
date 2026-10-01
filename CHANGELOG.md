@@ -9,6 +9,7 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 - Return the documented Matplotlib Figure from the current recording wrapper; retain the actual plotting dependency and real preview/layout/text assertions.
 - Preserve trusted-main license and CLA policy, and run strict complete release tests in the digest-verified, job-owned CI SIF before normal OIDC publishing.
+- Exercise real pdflatex and latexmk document workflows, including an embedded Matplotlib preview, requested PDF output directory and auxiliary-file cleanup.
 
 ## [Unreleased]
 
