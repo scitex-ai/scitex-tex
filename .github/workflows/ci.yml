@@ -17,7 +17,7 @@ concurrency:
 jobs:
   pytest-matrix:
     # Job name is a REQUIRED status check — keep verbatim fleet-wide.
-    name: pytest-matrix-on-ubuntu-py${{ matrix.python-version }}
+    name: ${{ (github.base_ref == 'main' || github.ref_name == 'main') && 'pytest-matrix / ' || '' }}pytest-matrix-on-ubuntu-py${{ matrix.python-version }}
     runs-on: >-
       ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)
           && fromJSON('["ubuntu-latest"]') || fromJSON(vars.CI_RUNS_ON || '["ubuntu-latest"]') }}
