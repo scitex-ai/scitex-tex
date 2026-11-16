@@ -1,6 +1,31 @@
 name: ci
 
-# Preserve native required matrix names while using the configured org pool.
+# ============================================================================
+# CANONICAL scitex CI — thin org-reusable caller (the ONE per-repo shape).
+# Rendered for scitex-tex by `scitex-dev ecosystem ci-template apply`.
+#
+# Job bodies live ONCE, org-side, at one reviewed immutable revision — a shared
+# workflow cannot drift per-repo (operator decision, 2026-07-21, superseding
+# the retired consolidated pr-ci.yml/release-ci.yml pair). This file carries
+# only triggers, concurrency, and thin `uses:` calls.
+# Pin the actual production commit qualified after the ordinary source merge;
+# runner-group SHA admission must not assume branch/SHA alias equivalence.
+#
+# Runner policy (operator 2026-10-03): company compute02/03/04 runners are
+# organization-only and require confirmed original actor, triggering actor
+# and same-repository PR author membership. Forks and unknown membership
+# run on GitHub-hosted hardware. Pass the repository/org CI_RUNS_ON preference
+# to the authoritative reusable admission workflow; the preference and labels
+# confer no authorization. An absent variable defaults to ubuntu-latest.
+#
+# Required-status-check contexts (branch protection must reference these;
+# under workflow_call GitHub renders "<caller-job-id> / <reusable job name>"):
+#   pytest-matrix / pytest-matrix-on-ubuntu-py<X.YY>
+#   import-smoke / import-smoke-on-ubuntu-py3-12
+#   quality-audit / audit
+#   rtd-sphinx-build / docs-sphinx
+# ============================================================================
+
 on:
   pull_request:
     branches: [main, develop]
@@ -12,187 +37,43 @@ on:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Cancel superseded PR runs; NEVER cancel post-merge/protected-branch runs
+  # (preserves the retired release-ci.yml coalescing semantic).
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# EACH JOB PASSES ONLY WHAT ITS CALLEE DECLARES. Measured 2026-08-05 against
+# scitex-ai/.github:
+#   pytest-matrix     workflow_call.secrets: CODECOV_TOKEN (required: false)
+#   import-smoke      workflow_call: {}      -- declares nothing
+#   quality-audit     workflow_call: {}      -- declares nothing
+#   rtd-sphinx-build  workflow_call.inputs only, no secrets
+# A callee that declares no secrets cannot RECEIVE one -- passing an undeclared
+# secret is an error -- so those three take no `secrets:` key at all. That is
+# why this is not a uniform "name the secret" edit.
+#
+# These triggers (pull_request / push / schedule) do NOT hand secrets to fork
+# PRs, so this was never the attacker-triggerable exposure that cla.yml had.
+# It is over-broad forwarding: every secret the repo holds, offered to four
+# workflows that between them want one optional token. Fixed on merit.
 jobs:
   pytest-matrix:
-    # Job name is a REQUIRED status check — keep verbatim fleet-wide.
-    name: ${{ (github.base_ref == 'main' || github.ref_name == 'main') && 'pytest-matrix / ' || '' }}pytest-matrix-on-ubuntu-py${{ matrix.python-version }}
-    runs-on: >-
-      ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)
-          && fromJSON('["ubuntu-latest"]') || fromJSON(vars.CI_RUNS_ON || '["ubuntu-latest"]') }}
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.11", "3.12", "3.13"]
-    steps:
-      - uses: actions/checkout@v4
-      - name: Initialize package-owned job state
-        run: |
-          set -euo pipefail
-          : "${RUNNER_TEMP:?runner must supply writable job scratch}"
-          CI_JOB_ROOT="$(mktemp -d "$RUNNER_TEMP/scitex-tex-ci.XXXXXXXX")"
-          mkdir -p "$CI_JOB_ROOT/tmp" "$CI_JOB_ROOT/uv-cache" "$CI_JOB_ROOT/cache" \
-            "$CI_JOB_ROOT/config" "$CI_JOB_ROOT/mpl" "$CI_JOB_ROOT/scitex-state"
-          {
-            printf 'TMPDIR=%s\n' "$CI_JOB_ROOT/tmp"
-            printf 'UV_CACHE_DIR=%s\n' "$CI_JOB_ROOT/uv-cache"
-            printf 'UV_PYTHON_INSTALL_DIR=%s\n' "$CI_JOB_ROOT/uv-python"
-            printf 'XDG_CACHE_HOME=%s\n' "$CI_JOB_ROOT/cache"
-            printf 'XDG_CONFIG_HOME=%s\n' "$CI_JOB_ROOT/config"
-            # Codecov uses git --global; keep its writes off shared HOME.
-            printf 'GIT_CONFIG_GLOBAL=%s\n' "$CI_JOB_ROOT/config/gitconfig"
-            printf 'MPLCONFIGDIR=%s\n' "$CI_JOB_ROOT/mpl"
-            printf 'SCITEX_DIR=%s\n' "$CI_JOB_ROOT/scitex-state"
-            printf 'MPLBACKEND=Agg\nRUN_E2E=1\n'
-          } >> "$GITHUB_ENV"
-      - uses: astral-sh/setup-uv@v7
-        with:
-          cache-dependency-glob: pyproject.toml
-      - name: Install (.[all,dev]) + pytest
-        run: |
-          set -euo pipefail
-          uv venv --python ${{ matrix.python-version }} .venv
-          uv pip install --python .venv/bin/python -e ".[all,dev]"
-          PKG=$(basename "$(find src -maxdepth 1 -mindepth 1 -type d ! -name '*.egg-info' | sort | head -1)")
-          # .venv/bin on PATH so tests that spawn the package's console script via
-          # subprocess (bare name, e.g. `scitex-dev …`) resolve it — else FileNotFoundError.
-          export PATH="$PWD/.venv/bin:$PATH"
-          source .github/ci/ensure-tex.sh
-          .venv/bin/python -m pytest tests/ --cov="src/$PKG" --cov-report=xml --cov-report=term
-      - name: Upload coverage to Codecov
-        if: always() && matrix.python-version == '3.12'
-        uses: codecov/codecov-action@v5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./coverage.xml
-          fail_ci_if_error: false
+    uses: scitex-ai/.github/.github/workflows/pytest-matrix.yml@cd4e545a20a1e35385ffe88f4a963ae3c500819b
+    with:
+      runs_on: ${{ vars.CI_RUNS_ON || '["ubuntu-latest"]' }}
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   import-smoke:
-    name: import-smoke-on-ubuntu-py3-12
-    runs-on: >-
-      ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)
-          && fromJSON('["ubuntu-latest"]') || fromJSON(vars.CI_RUNS_ON || '["ubuntu-latest"]') }}
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - name: Initialize package-owned job state
-        run: |
-          set -euo pipefail
-          : "${RUNNER_TEMP:?runner must supply writable job scratch}"
-          CI_JOB_ROOT="$(mktemp -d "$RUNNER_TEMP/scitex-tex-ci.XXXXXXXX")"
-          mkdir -p "$CI_JOB_ROOT/tmp" "$CI_JOB_ROOT/uv-cache" "$CI_JOB_ROOT/cache" \
-            "$CI_JOB_ROOT/config" "$CI_JOB_ROOT/mpl" "$CI_JOB_ROOT/scitex-state"
-          {
-            printf 'TMPDIR=%s\n' "$CI_JOB_ROOT/tmp"
-            printf 'UV_CACHE_DIR=%s\n' "$CI_JOB_ROOT/uv-cache"
-            printf 'UV_PYTHON_INSTALL_DIR=%s\n' "$CI_JOB_ROOT/uv-python"
-            printf 'XDG_CACHE_HOME=%s\n' "$CI_JOB_ROOT/cache"
-            printf 'XDG_CONFIG_HOME=%s\n' "$CI_JOB_ROOT/config"
-            # Codecov uses git --global; keep its writes off shared HOME.
-            printf 'GIT_CONFIG_GLOBAL=%s\n' "$CI_JOB_ROOT/config/gitconfig"
-            printf 'MPLCONFIGDIR=%s\n' "$CI_JOB_ROOT/mpl"
-            printf 'SCITEX_DIR=%s\n' "$CI_JOB_ROOT/scitex-state"
-            printf 'MPLBACKEND=Agg\nRUN_E2E=1\n'
-          } >> "$GITHUB_ENV"
-      - uses: astral-sh/setup-uv@v7
-        with:
-          cache-dependency-glob: pyproject.toml
-      - name: Install (no extras) + import
-        run: |
-          set -euo pipefail
-          uv venv --python 3.12 .venv
-          uv pip install --python .venv/bin/python -e .
-          PKG=$(basename "$(find src -maxdepth 1 -mindepth 1 -type d ! -name '*.egg-info' | sort | head -1)")
-          .venv/bin/python -c "import importlib; importlib.import_module('$PKG'); print('import OK:', '$PKG')"
+    uses: scitex-ai/.github/.github/workflows/import-smoke.yml@cd4e545a20a1e35385ffe88f4a963ae3c500819b
+    with:
+      runs_on: ${{ vars.CI_RUNS_ON || '["ubuntu-latest"]' }}
 
-  audit:
-    name: audit
-    runs-on: >-
-      ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)
-          && fromJSON('["ubuntu-latest"]') || fromJSON(vars.CI_RUNS_ON || '["ubuntu-latest"]') }}
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - name: Initialize package-owned job state
-        run: |
-          set -euo pipefail
-          : "${RUNNER_TEMP:?runner must supply writable job scratch}"
-          CI_JOB_ROOT="$(mktemp -d "$RUNNER_TEMP/scitex-tex-ci.XXXXXXXX")"
-          mkdir -p "$CI_JOB_ROOT/tmp" "$CI_JOB_ROOT/uv-cache" "$CI_JOB_ROOT/cache" \
-            "$CI_JOB_ROOT/config" "$CI_JOB_ROOT/mpl" "$CI_JOB_ROOT/scitex-state"
-          {
-            printf 'TMPDIR=%s\n' "$CI_JOB_ROOT/tmp"
-            printf 'UV_CACHE_DIR=%s\n' "$CI_JOB_ROOT/uv-cache"
-            printf 'UV_PYTHON_INSTALL_DIR=%s\n' "$CI_JOB_ROOT/uv-python"
-            printf 'XDG_CACHE_HOME=%s\n' "$CI_JOB_ROOT/cache"
-            printf 'XDG_CONFIG_HOME=%s\n' "$CI_JOB_ROOT/config"
-            # Codecov uses git --global; keep its writes off shared HOME.
-            printf 'GIT_CONFIG_GLOBAL=%s\n' "$CI_JOB_ROOT/config/gitconfig"
-            printf 'MPLCONFIGDIR=%s\n' "$CI_JOB_ROOT/mpl"
-            printf 'SCITEX_DIR=%s\n' "$CI_JOB_ROOT/scitex-state"
-            printf 'MPLBACKEND=Agg\nRUN_E2E=1\n'
-          } >> "$GITHUB_ENV"
-      - uses: astral-sh/setup-uv@v7
-        with:
-          cache-dependency-glob: pyproject.toml
-      - name: Install + audit the workspace
-        run: |
-          set -euo pipefail
-          uv venv --python 3.12 .venv
-          uv pip install --python .venv/bin/python -e ".[all,dev]"
-          uv pip install --python .venv/bin/python scitex-dev
-          # .venv/bin on PATH so audit-all's spawned `scitex-dev` subcommands resolve.
-          export PATH="$PWD/.venv/bin:$PATH"
-          DIST=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['name'])")
-          # --path . audits the CHECKOUT (PR code), not the runner's shared state.
-          scitex-dev ecosystem audit-all "$DIST" --path "$PWD"
+  quality-audit:
+    uses: scitex-ai/.github/.github/workflows/quality-audit.yml@cd4e545a20a1e35385ffe88f4a963ae3c500819b
+    with:
+      runs_on: ${{ vars.CI_RUNS_ON || '["ubuntu-latest"]' }}
 
-  docs-sphinx:
-    name: docs-sphinx
-    runs-on: >-
-      ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)
-          && fromJSON('["ubuntu-latest"]') || fromJSON(vars.CI_RUNS_ON || '["ubuntu-latest"]') }}
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - name: Initialize package-owned job state
-        run: |
-          set -euo pipefail
-          : "${RUNNER_TEMP:?runner must supply writable job scratch}"
-          CI_JOB_ROOT="$(mktemp -d "$RUNNER_TEMP/scitex-tex-ci.XXXXXXXX")"
-          mkdir -p "$CI_JOB_ROOT/tmp" "$CI_JOB_ROOT/uv-cache" "$CI_JOB_ROOT/cache" \
-            "$CI_JOB_ROOT/config" "$CI_JOB_ROOT/mpl" "$CI_JOB_ROOT/scitex-state"
-          {
-            printf 'TMPDIR=%s\n' "$CI_JOB_ROOT/tmp"
-            printf 'UV_CACHE_DIR=%s\n' "$CI_JOB_ROOT/uv-cache"
-            printf 'UV_PYTHON_INSTALL_DIR=%s\n' "$CI_JOB_ROOT/uv-python"
-            printf 'XDG_CACHE_HOME=%s\n' "$CI_JOB_ROOT/cache"
-            printf 'XDG_CONFIG_HOME=%s\n' "$CI_JOB_ROOT/config"
-            # Codecov uses git --global; keep its writes off shared HOME.
-            printf 'GIT_CONFIG_GLOBAL=%s\n' "$CI_JOB_ROOT/config/gitconfig"
-            printf 'MPLCONFIGDIR=%s\n' "$CI_JOB_ROOT/mpl"
-            printf 'SCITEX_DIR=%s\n' "$CI_JOB_ROOT/scitex-state"
-            printf 'MPLBACKEND=Agg\nRUN_E2E=1\n'
-          } >> "$GITHUB_ENV"
-      - uses: astral-sh/setup-uv@v7
-        with:
-          cache-dependency-glob: pyproject.toml
-      - name: Build sphinx HTML (satisfies PS-122; RTD bundle stays fresh)
-        run: |
-          set -euo pipefail
-          CONF=""
-          for c in docs/sphinx/conf.py docs/conf.py docs/source/conf.py docs/src/conf.py; do
-            [ -f "$c" ] && CONF="$c" && break
-          done
-          if [ -z "$CONF" ]; then
-            echo "::error::no Sphinx conf.py found; documentation was not built"
-            exit 1
-          fi
-          uv venv --python 3.12 .venv
-          uv pip install --python .venv/bin/python -e ".[docs]"
-          CONFDIR=$(dirname "$CONF")
-          # use the `sphinx-build` console script (not `python -m sphinx`) so the
-          # auditor's PS-122 detects this workflow runs sphinx-build.
-          .venv/bin/sphinx-build -b html "$CONFDIR" "$CONFDIR/_build/html"
+  rtd-sphinx-build:
+    uses: scitex-ai/.github/.github/workflows/rtd-sphinx-build.yml@cd4e545a20a1e35385ffe88f4a963ae3c500819b
+    with:
+      runs_on: ${{ vars.CI_RUNS_ON || '["ubuntu-latest"]' }}
